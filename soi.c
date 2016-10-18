@@ -112,6 +112,7 @@ void usage() {
   printf("\nExample: soi N=1000 A=100 B=200 AB=30\n");
   printf("\nOptions:\n");
   printf(" -h         | Print this help message.\n");
+  printf(" -t         | Output results in tab-delimited format.\n");
   printf(" -n N       | Set the total number of items to N (default: %d).\n", NDATA);
   printf(" -i I       | Set the number of iterations to I (default: %d).\n", NITERS);
   printf(" -r rfile   | Write an R script to plot the specified sets to `rfile'.\n");
