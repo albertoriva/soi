@@ -18,11 +18,12 @@ struct Params {
   int niters;
   int nsets;
   int nA, nB, nC, nD;
-  int *counts, *targets, *successes; /* Vectors of MAXCNT elements holding counts of intersection occurrences, target intersection, successes */
+  int *counts, *targets, *successes, *giuccesses; /* Vectors of MAXCNT elements holding counts of intersection occurrences, target intersection, successes (+ and -). */
   float *expected;
   int outfmt;
   char *Rfile;
   char *imgfile;
+  int twoWay;
 } params;
 
 struct Params *P;
@@ -101,10 +102,15 @@ void dump() {
     printf("%d, ", P->targets[i]);
   }
   printf("\n");
+  printf("Successes: ");
+  for (i = 0; i < MAXCNT; i++) {
+    printf("%d, ", P->successes[i]);
+  }
+  printf("\n");
 }
 
 void usage() {
-  printf("Usage: soi [-h] [-t] [-i I] [-n N] specs...\n\n");
+  printf("Usage: soi [-h] [-t] [-i I] [-n N] [-2] specs...\n\n");
   printf("This program evaluates whether the intersection between different sets is statistically significant.\n\n");
   printf("`specs' consists of entries of the form S=n, where S describes a set or an intersection, and n is the\n");
   printf("number of elements it contains. S can be one of: N, A, B, C, D, AB, AC, AD, BC, BD, CD, ABC, ABD, ACD,\n");
@@ -117,6 +123,7 @@ void usage() {
   printf(" -i I       | Set the number of iterations to I (default: %d).\n", NITERS);
   printf(" -r rfile   | Write an R script to plot the specified sets to `rfile'.\n");
   printf(" -i imgfile | The R script will save image to png file `imgfile' (default: %s).\n", PNGFILE);
+  printf(" -2         | Enable 2-way mode. Only uses the following specs: A, B, AB.\n");
 }
 
 void setExpected() {
@@ -153,6 +160,7 @@ void initialize(int argc, char *argv[]) {
   P->counts = malloc(MAXCNT*sizeof(int)); /* Counters for occurrence of each intersection in a single iteration */
   P->targets = malloc(MAXCNT*sizeof(int)); /* Observed size of each intersection */
   P->successes = malloc(MAXCNT*sizeof(int)); /* How many times each intersection count is above target */
+  P->giuccesses = malloc(MAXCNT*sizeof(int)); /* How many times each intersection count is below target */
   P->ndata = NDATA;
   P->niters = NITERS;
   P->nsets = 0;
@@ -163,8 +171,11 @@ void initialize(int argc, char *argv[]) {
 
   P->Rfile = "";
   P->imgfile = PNGFILE;
+  P->twoWay = 0;
 
   zerofill(P->targets, MAXCNT);
+  zerofill(P->successes, MAXCNT);
+  zerofill(P->giuccesses, MAXCNT);
 
   for (i = 1; i < argc; i++) {
     a = argv[i];
@@ -189,9 +200,11 @@ void initialize(int argc, char *argv[]) {
       next = a;
     } else if (!strcmp(a, "-t")) {
       P->outfmt = FMTTAB;
+    } else if (!strcmp(a, "-2")) {
+      P->twoWay = 1;
     } else {
       parsePair(a, data);
-      if (data[0] == 0) {
+      if (data[0] == 0) {	/* N */
 	P->ndata = data[1];
       } else if (data[0] == 1) {
 	P->nA = data[1];
@@ -221,6 +234,7 @@ int num_sets() {
 }
       
 void randomFill(int na, int v) {
+  /* Fill the buffer with na instances of value v, in random locations. */
   int *buf;
   int N, r, found=0;
   
@@ -264,7 +278,28 @@ int countIntersecting() {
     P->counts[P->buf[i]]++;
   }
 
-  /* print it 
+  /*
+  for (i = 0; i < MAXCNT; i++) {
+    printf("%d: %d\n", i, P->counts[i]);
+  }
+  */
+}
+
+int countIntersecting2() {
+  int i;
+  
+  zerofill(P->buf, P->ndata);
+  randomFill(P->nA, 1);
+  randomFill(P->nB, 2);
+
+  /* zero counts */
+  zerofill(P->counts, MAXCNT);
+
+  /* count how many times we see each intersection */
+  for (i = 0; i < P->ndata; i++) {
+    P->counts[P->buf[i]]++;
+  }
+  /*
   for (i = 0; i < MAXCNT; i++) {
     printf("%d: %d\n", i, P->counts[i]);
   }
@@ -357,6 +392,71 @@ void writeRscript() {
   fprintf(f, "dev.off()\n");
 }
 
+/* Two-way mode */
+
+void dispResult(int idx, char *key) {
+  float p, p1, p2;
+  char *dir;
+
+  p1 = 1.0*(1 + P->successes[idx])/(1 + P->niters);
+  p2 = 1.0*(1 + P->giuccesses[idx])/(1 + P->niters);
+
+  if (p1 < p2) {
+    p = p1;
+    dir = "+";
+  } else {
+    p = p2;
+    dir = "-";
+  }
+
+  switch (P->outfmt) {
+  case FMTDEF:
+    printf("%s: Expected=%d, Observed=%d, P(%s)=%f\n", key, (int)(P->ndata*P->expected[idx]), P->targets[idx], dir, p);
+    break;
+  case FMTTAB:
+    printf("%s\t%d\t%d\t%s\t%f\n", key, (int)(P->ndata*P->expected[idx]), P->targets[idx], dir, p);
+    break;
+  }
+}
+
+void twoWayMode() {
+  int i, it;
+  float fA, fB, *e;
+  e = malloc(4*sizeof(float));
+
+  if ((P->nA == 0) || (P->nB == 0) || (P->targets[3] == 0)) {
+    fprintf(stderr, "Error: two-way mode requires A, B, and AB.\n");
+    exit(1);
+  }
+  P->targets[1] = P->nA - P->targets[3]; /* A only */
+  P->targets[2] = P->nB - P->targets[3]; /* B only */
+  fA = 1.0*P->nA/P->ndata;
+  fB = 1.0*P->nB/P->ndata;
+  e[3] = fA*fB;
+  e[1] = fA*(1.0-fB);
+  e[2] = fB*(1.0-fA);
+  P->expected = e;
+
+  /* dump(); */
+
+  for (it = 0; it < P->niters; it++) {
+    countIntersecting2();
+    for (i = 0; i < 4; i++) {
+      if (P->counts[i] >= P->targets[i]) {
+	P->successes[i]++;
+      } else {
+	P->giuccesses[i]++;
+      }
+    }
+  }
+  /* dump(); */
+
+  printf("# N = %d\n", P->ndata);
+  dispResult(3, "AB");
+  dispResult(1, "A0");
+  dispResult(2, "B0");
+}
+
 /* Main */
 
 int main(int argc, char *argv[]) {
@@ -367,6 +467,11 @@ int main(int argc, char *argv[]) {
   srand(time(0));
   initialize(argc, argv);
   /* dump(); */
+
+  if (P->twoWay) {
+    twoWayMode();
+    return;
+  }
 
   for (it = 0; it < P->niters; it++) {
     countIntersecting();
