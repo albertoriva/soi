@@ -10,7 +10,7 @@ The syntax for this command is:
 soi [-h] [-t] [-i I] [-n N] [-2] specs...
 ```
 
-`specs' consists of entries of the form `S=n`, where S describes a set or an intersection, and n is the
+`specs` consists of entries of the form `S=n`, where S describes a set or an intersection, and n is the
 number of elements it contains. S can be one of: N, A, B, C, D, AB, AC, AD, BC, BD, CD, ABC, ABD, ACD,
 BCD, ABCD. N indicates the total number of items in the domain (can also be set with the `-n` option), 
 single letters indicate the size of sets, multiple letters indicate intersections.
