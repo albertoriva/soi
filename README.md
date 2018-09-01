@@ -32,10 +32,31 @@ Option|Description
  -t         | Output results in tab-delimited format.
  -n N       | Set the total number of items to N (default: 1000).
  -i I       | Set the number of iterations to I (default: 100000).
- -r rfile   | Write an R script to plot the specified sets to `rfile'.
- -i imgfile | The R script will save image to png file `imgfile' (default: venn.png).
+ -r rfile   | Write an R script to plot the specified sets to `rfile`.
+ -i imgfile | The R script will save image to png file `imgfile` (default: venn.png).
  -2         | Enable 2-way mode. Only uses the following specs: A, B, AB.
 
 ## Example
 
-Example: soi N=1000 A=100 B=200 AB=30
+Imagine we conducted a survey of 1,000 individuals, and we found that 200 of them like
+apples (A), 100 like bananas (B), and 50 like cherries (C). We also found that 22 or them 
+like both apples and bananas (AB), 20 like both apples and cherries (AC), and 40 like 
+bananas and cherries (BC). Finally, 5 individuals like all three fruits. We can ask the
+question: are these intersections larger than we would expect by chance? E.g., is there
+reason to believe that people who like apples also like bananas?
+
+This can be answered with soi as follows:
+
+```
+$ soi N=1000 A=200 B=100 C=50 AB=22 AC=20 BC=40 ABC=5
+# N = 1000
+AB: Expected=20, Observed=22, P=0.249757
+AC: Expected=10, Observed=20, P=0.000170
+BC: Expected=5, Observed=40, P=0.000010
+ABC: Expected=1, Observed=5, P=0.002950
+```
+
+Assuming a standard significance level of 1%, This result tells us that the intersection
+between apple-likers and banana-likers is *not* significant. On the other hand, the
+intersection between A and C and the one between B and C are highly significant. Finally,
+the intersection of all three groups is also significant, although at a lower level.
